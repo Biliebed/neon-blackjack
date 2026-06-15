@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { RoomData } from '@/app/page';
+import { apiPost } from '@/lib/api';
 
 interface Props {
   onJoinGame: (data: RoomData) => void;
@@ -22,12 +23,7 @@ export default function LobbyScreen({ onJoinGame }: Props) {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('/api/room', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create', playerName: playerName.trim() }),
-      });
-      const data = await res.json();
+      const data = await apiPost('/api/room', { action: 'create', playerName: playerName.trim() });
       if (data.success) {
         onJoinGame({ roomId: data.roomId, playerId: data.playerId, playerName: playerName.trim() });
       } else {
@@ -51,12 +47,7 @@ export default function LobbyScreen({ onJoinGame }: Props) {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('/api/room', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'join', playerName: playerName.trim(), roomId: roomCode.trim().toUpperCase() }),
-      });
-      const data = await res.json();
+      const data = await apiPost('/api/room', { action: 'join', playerName: playerName.trim(), roomId: roomCode.trim().toUpperCase() });
       if (data.success) {
         onJoinGame({ roomId: data.roomId, playerId: data.playerId, playerName: playerName.trim() });
       } else {

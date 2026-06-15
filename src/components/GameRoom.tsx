@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { RoomData } from '@/app/page';
 import { Card, Player, GameState } from '@/lib/blackjack';
+import { apiGet, apiPost } from '@/lib/api';
 import CardComponent from './CardComponent';
 import TurnTimer from './TurnTimer';
 
@@ -17,8 +18,7 @@ export default function GameRoom({ roomData, onLeave }: Props) {
 
   const fetchGame = useCallback(async () => {
     try {
-      const res = await fetch(`/api/game?roomId=${roomData.roomId}&playerId=${roomData.playerId}`);
-      const data = await res.json();
+      const data = await apiGet('/api/game', { roomId: roomData.roomId, playerId: roomData.playerId });
       if (data.success) {
         setGame(data.game);
       }
@@ -36,12 +36,7 @@ export default function GameRoom({ roomData, onLeave }: Props) {
 
   const doAction = async (action: string) => {
     try {
-      const res = await fetch('/api/game', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomId: roomData.roomId, playerId: roomData.playerId, action }),
-      });
-      const data = await res.json();
+      const data = await apiPost('/api/game', { roomId: roomData.roomId, playerId: roomData.playerId, action });
       if (data.success) {
         setGame(data.game);
       }

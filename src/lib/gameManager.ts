@@ -1,25 +1,53 @@
 import { GameState, Player, Card, createDeck, calculateScore, isBlackjack, determineWinner } from './blackjack';
 import { v4 as uuidv4 } from 'uuid';
+import fs from 'fs';
+import path from 'path';
 
-// Use globalThis to persist across serverless invocations on the same instance
-// This works because Vercel reuses warm instances
-const globalForGames = globalThis as unknown as {
-  __games: Map<string, GameState> | undefined;
-  __lastCleanup: number | undefined;
-};
+const STORE_DIR = '/tmp/neon-blackjack-rooms';
 
-if (!globalForGames.__games) {
-  globalForGames.__games = new Map<string, GameState>();
+// Ensure store directory exists
+function ensureDir() {
+  if (!fs.existsSync(STORE_DIR)) {
+    fs.mkdirSync(STORE_DIR, { recursive: true });
+  }
 }
-if (!globalForGames.__lastCleanup) {
-  globalForGames.__lastCleanup = Date.now();
+
+function getRoomPath(roomId: string): string {
+  return path.join(STORE_DIR, `${roomId}.json`);
+}
+
+function loadGame(roomId: string): GameState | null {
+  ensureDir();
+  const filePath = getRoomPath(roomId);
+  try {
+    if (fs.existsSync(filePath)) {
+      const data = fs.readFileSync(filePath, 'utf-8');
+      return JSON.parse(data) as GameState;
+    }
+  } catch (e) {
+    console.error('Failed to load game:', e);
+  }
+  return null;
+}
+
+function saveGame(game: GameState) {
+  ensureDir();
+  const filePath = getRoomPath(game.roomId);
+  fs.writeFileSync(filePath, JSON.stringify(game), 'utf-8');
+}
+
+function deleteGame(roomId: string) {
+  const filePath = getRoomPath(roomId);
+  try {
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  } catch (e) {
+    // ignore
+  }
 }
 
 export class GameManager {
-  private get games(): Map<string, GameState> {
-    return globalForGames.__games!;
-  }
-
   private generateRoomCode(): string {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let code = '';
@@ -30,17 +58,26 @@ export class GameManager {
   }
 
   private cleanup() {
-    const now = Date.now();
-    // Cleanup every 5 minutes
-    if (now - globalForGames.__lastCleanup! < 300000) return;
-    globalForGames.__lastCleanup = now;
-
-    const entries = Array.from(this.games.entries());
-    for (const [id, game] of entries) {
-      // Remove games older than 30 minutes
-      if (now - game.createdAt > 1800000) {
-        this.games.delete(id);
+    ensureDir();
+    try {
+      const files = fs.readdirSync(STORE_DIR);
+      const now = Date.now();
+      for (const file of files) {
+        const filePath = path.join(STORE_DIR, file);
+        try {
+          const data = fs.readFileSync(filePath, 'utf-8');
+          const game = JSON.parse(data) as GameState;
+          // Remove games older than 30 minutes
+          if (now - game.createdAt > 1800000) {
+            fs.unlinkSync(filePath);
+          }
+        } catch (e) {
+          // Remove corrupted files
+          try { fs.unlinkSync(filePath); } catch (_) {}
+        }
       }
+    } catch (e) {
+      // ignore
     }
   }
 
@@ -59,12 +96,12 @@ export class GameManager {
       turnStartedAt: null,
       turnDuration: 15,
     };
-    this.games.set(roomId, game);
+    saveGame(game);
     return roomId;
   }
 
   joinRoom(roomId: string, playerName: string): Player | null {
-    const game = this.games.get(roomId);
+    const game = loadGame(roomId);
     if (!game || game.players.length >= 2) return null;
 
     const player: Player = {
@@ -77,15 +114,18 @@ export class GameManager {
       wins: 0,
     };
     game.players.push(player);
+    saveGame(game);
     return player;
   }
 
   getGame(roomId: string): GameState | undefined {
-    const game = this.games.get(roomId);
+    const game = loadGame(roomId);
     if (game) {
       this.checkTimer(game);
+      saveGame(game); // Save in case timer triggered auto-stand
+      return game;
     }
-    return game;
+    return undefined;
   }
 
   // Auto-stand if timer expired
@@ -103,7 +143,7 @@ export class GameManager {
   }
 
   setReady(roomId: string, playerId: string) {
-    const game = this.games.get(roomId);
+    const game = loadGame(roomId);
     if (!game) return;
 
     const player = game.players.find(p => p.id === playerId);
@@ -115,6 +155,7 @@ export class GameManager {
     if (game.players.length === 2 && game.players.every(p => p.isReady)) {
       this.startRound(game);
     }
+    saveGame(game);
   }
 
   private startRound(game: GameState) {
@@ -143,15 +184,23 @@ export class GameManager {
   }
 
   hit(roomId: string, playerId: string) {
-    const game = this.games.get(roomId);
+    const game = loadGame(roomId);
     if (!game || game.phase !== 'playing') return;
 
+    this.checkTimer(game);
+
     const currentPlayer = game.players[game.currentTurn];
-    if (currentPlayer.id !== playerId) return;
+    if (currentPlayer.id !== playerId) {
+      saveGame(game);
+      return;
+    }
 
     // Draw a card
     const card = game.deck.pop();
-    if (!card) return;
+    if (!card) {
+      saveGame(game);
+      return;
+    }
 
     currentPlayer.hand.push(card);
     currentPlayer.score = calculateScore(currentPlayer.hand);
@@ -161,17 +210,24 @@ export class GameManager {
       currentPlayer.status = 'bust';
       this.nextTurn(game);
     }
+    saveGame(game);
   }
 
   stand(roomId: string, playerId: string) {
-    const game = this.games.get(roomId);
+    const game = loadGame(roomId);
     if (!game || game.phase !== 'playing') return;
 
+    this.checkTimer(game);
+
     const currentPlayer = game.players[game.currentTurn];
-    if (currentPlayer.id !== playerId) return;
+    if (currentPlayer.id !== playerId) {
+      saveGame(game);
+      return;
+    }
 
     currentPlayer.status = 'stand';
     this.nextTurn(game);
+    saveGame(game);
   }
 
   private nextTurn(game: GameState) {
@@ -206,7 +262,7 @@ export class GameManager {
   }
 
   nextRound(roomId: string) {
-    const game = this.games.get(roomId);
+    const game = loadGame(roomId);
     if (!game || game.phase !== 'result') return;
 
     game.round++;
@@ -224,6 +280,7 @@ export class GameManager {
     if (game.players.length === 2) {
       this.startRound(game);
     }
+    saveGame(game);
   }
 }
 
