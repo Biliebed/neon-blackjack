@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { RoomData } from '@/app/page';
 import { Card, Player, GameState } from '@/lib/blackjack';
 import CardComponent from './CardComponent';
+import TurnTimer from './TurnTimer';
 
 interface Props {
   roomData: RoomData;
@@ -13,7 +14,6 @@ interface Props {
 export default function GameRoom({ roomData, onLeave }: Props) {
   const [game, setGame] = useState<GameState | null>(null);
   const [copied, setCopied] = useState(false);
-  const [polling, setPolling] = useState(true);
 
   const fetchGame = useCallback(async () => {
     try {
@@ -92,6 +92,14 @@ export default function GameRoom({ roomData, onLeave }: Props) {
         </span>
       </div>
 
+      {/* Timer */}
+      <TurnTimer
+        turnStartedAt={game.turnStartedAt}
+        turnDuration={game.turnDuration}
+        isMyTurn={isMyTurn}
+        isPlaying={game.phase === 'playing'}
+      />
+
       {/* Opponent area */}
       <div className="w-full max-w-lg mb-6">
         <div className="neon-border-magenta rounded-xl p-4 bg-black/40 backdrop-blur-sm">
@@ -105,12 +113,7 @@ export default function GameRoom({ roomData, onLeave }: Props) {
                   <span className="text-neon-magenta/60 text-xs font-['Rajdhani']">
                     WINS: {opponent.wins}
                   </span>
-                  {game.phase === 'playing' && (
-                    <span className="text-neon-yellow text-lg font-['Orbitron']">
-                      {opponent.score}
-                    </span>
-                  )}
-                  {(game.phase === 'result') && (
+                  {(game.phase === 'playing' || game.phase === 'result') && (
                     <span className="text-neon-yellow text-lg font-['Orbitron']">
                       {opponent.score}
                     </span>

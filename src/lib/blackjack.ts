@@ -27,6 +27,8 @@ export interface GameState {
   round: number;
   winner: string | null;
   createdAt: number;
+  turnStartedAt: number | null;
+  turnDuration: number; // seconds
 }
 
 // Create a shuffled deck (6 decks)

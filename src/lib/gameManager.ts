@@ -56,6 +56,8 @@ export class GameManager {
       round: 1,
       winner: null,
       createdAt: Date.now(),
+      turnStartedAt: null,
+      turnDuration: 15,
     };
     this.games.set(roomId, game);
     return roomId;
@@ -79,7 +81,25 @@ export class GameManager {
   }
 
   getGame(roomId: string): GameState | undefined {
-    return this.games.get(roomId);
+    const game = this.games.get(roomId);
+    if (game) {
+      this.checkTimer(game);
+    }
+    return game;
+  }
+
+  // Auto-stand if timer expired
+  private checkTimer(game: GameState) {
+    if (game.phase !== 'playing' || !game.turnStartedAt) return;
+
+    const elapsed = (Date.now() - game.turnStartedAt) / 1000;
+    if (elapsed >= game.turnDuration) {
+      const currentPlayer = game.players[game.currentTurn];
+      if (currentPlayer && currentPlayer.status === 'playing') {
+        currentPlayer.status = 'stand';
+        this.nextTurn(game);
+      }
+    }
   }
 
   setReady(roomId: string, playerId: string) {
@@ -102,6 +122,7 @@ export class GameManager {
     game.phase = 'playing';
     game.winner = null;
     game.currentTurn = 0;
+    game.turnStartedAt = Date.now();
 
     // Deal 2 cards to each player
     for (const player of game.players) {
@@ -163,6 +184,7 @@ export class GameManager {
 
     // Move to next player
     game.currentTurn = (game.currentTurn + 1) % game.players.length;
+    game.turnStartedAt = Date.now();
 
     // Skip players who are already done
     if (game.players[game.currentTurn].status !== 'playing') {
@@ -172,6 +194,7 @@ export class GameManager {
 
   private endRound(game: GameState) {
     game.phase = 'result';
+    game.turnStartedAt = null;
     if (game.players.length === 2) {
       const winner = determineWinner(game.players[0], game.players[1]);
       game.winner = winner;
