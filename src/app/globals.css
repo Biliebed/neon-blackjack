@@ -1,0 +1,143 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --neon-cyan: #00f5ff;
+  --neon-magenta: #ff00ff;
+  --neon-green: #39ff14;
+  --neon-yellow: #ffff00;
+  --neon-red: #ff073a;
+}
+
+body {
+  background: #0a0a0f;
+  color: white;
+  font-family: 'Orbitron', monospace, sans-serif;
+  overflow-x: hidden;
+}
+
+/* Neon text glow */
+.neon-text {
+  text-shadow: 0 0 7px var(--neon-cyan), 0 0 10px var(--neon-cyan), 
+               0 0 21px var(--neon-cyan), 0 0 42px var(--neon-cyan);
+}
+
+.neon-text-magenta {
+  text-shadow: 0 0 7px var(--neon-magenta), 0 0 10px var(--neon-magenta), 
+               0 0 21px var(--neon-magenta), 0 0 42px var(--neon-magenta);
+}
+
+.neon-text-green {
+  text-shadow: 0 0 7px var(--neon-green), 0 0 10px var(--neon-green), 
+               0 0 21px var(--neon-green), 0 0 42px var(--neon-green);
+}
+
+/* Neon border */
+.neon-border {
+  border: 1px solid var(--neon-cyan);
+  box-shadow: 0 0 5px var(--neon-cyan), inset 0 0 5px var(--neon-cyan),
+              0 0 15px var(--neon-cyan), inset 0 0 15px rgba(0, 245, 255, 0.1);
+}
+
+.neon-border-magenta {
+  border: 1px solid var(--neon-magenta);
+  box-shadow: 0 0 5px var(--neon-magenta), inset 0 0 5px var(--neon-magenta),
+              0 0 15px var(--neon-magenta), inset 0 0 15px rgba(255, 0, 255, 0.1);
+}
+
+/* Card styles */
+.card-back {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  border: 2px solid var(--neon-cyan);
+  box-shadow: 0 0 10px var(--neon-cyan), inset 0 0 10px rgba(0, 245, 255, 0.1);
+}
+
+.card-front {
+  background: linear-gradient(135deg, #1a1a2e 0%, #0d1117 100%);
+  border: 2px solid var(--neon-green);
+  box-shadow: 0 0 10px var(--neon-green);
+}
+
+/* Button neon */
+.btn-neon {
+  position: relative;
+  padding: 12px 32px;
+  border: 2px solid var(--neon-cyan);
+  color: var(--neon-cyan);
+  background: transparent;
+  font-family: 'Orbitron', monospace;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 0 5px var(--neon-cyan), inset 0 0 5px var(--neon-cyan);
+}
+
+.btn-neon:hover {
+  background: rgba(0, 245, 255, 0.1);
+  box-shadow: 0 0 10px var(--neon-cyan), 0 0 40px var(--neon-cyan), 
+              inset 0 0 10px var(--neon-cyan);
+  transform: scale(1.05);
+}
+
+.btn-neon-magenta {
+  border-color: var(--neon-magenta);
+  color: var(--neon-magenta);
+  box-shadow: 0 0 5px var(--neon-magenta), inset 0 0 5px var(--neon-magenta);
+}
+
+.btn-neon-magenta:hover {
+  background: rgba(255, 0, 255, 0.1);
+  box-shadow: 0 0 10px var(--neon-magenta), 0 0 40px var(--neon-magenta), 
+              inset 0 0 10px var(--neon-magenta);
+}
+
+.btn-neon-green {
+  border-color: var(--neon-green);
+  color: var(--neon-green);
+  box-shadow: 0 0 5px var(--neon-green), inset 0 0 5px var(--neon-green);
+}
+
+.btn-neon-green:hover {
+  background: rgba(57, 255, 20, 0.1);
+  box-shadow: 0 0 10px var(--neon-green), 0 0 40px var(--neon-green), 
+              inset 0 0 10px var(--neon-green);
+}
+
+/* Animated background */
+.bg-grid {
+  background-image: 
+    linear-gradient(rgba(0, 245, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 245, 255, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+}
+
+/* Particle effect */
+@keyframes particle {
+  0% { transform: translateY(0) translateX(0); opacity: 1; }
+  100% { transform: translateY(-100vh) translateX(50px); opacity: 0; }
+}
+
+.particle {
+  position: fixed;
+  width: 2px;
+  height: 2px;
+  background: var(--neon-cyan);
+  border-radius: 50%;
+  animation: particle 8s linear infinite;
+  box-shadow: 0 0 5px var(--neon-cyan);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #0a0a0f; }
+::-webkit-scrollbar-thumb { background: var(--neon-cyan); border-radius: 3px; }
+
+/* Table felt */
+.table-felt {
+  background: radial-gradient(ellipse at center, #0d4a1c 0%, #062a0e 60%, #021a06 100%);
+  border: 3px solid var(--neon-green);
+  box-shadow: 0 0 20px var(--neon-green), inset 0 0 30px rgba(57, 255, 20, 0.05);
+}
