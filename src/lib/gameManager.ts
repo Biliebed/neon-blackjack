@@ -1,26 +1,64 @@
 import { GameState, Player, Card, createDeck, calculateScore, isBlackjack, determineWinner } from './blackjack';
 import { v4 as uuidv4 } from 'uuid';
 
+// Use globalThis to persist across serverless invocations on the same instance
+// This works because Vercel reuses warm instances
+const globalForGames = globalThis as unknown as {
+  __games: Map<string, GameState> | undefined;
+  __lastCleanup: number | undefined;
+};
+
+if (!globalForGames.__games) {
+  globalForGames.__games = new Map<string, GameState>();
+}
+if (!globalForGames.__lastCleanup) {
+  globalForGames.__lastCleanup = Date.now();
+}
+
 export class GameManager {
-  private games: Map<string, GameState> = new Map();
+  private get games(): Map<string, GameState> {
+    return globalForGames.__games!;
+  }
+
+  private generateRoomCode(): string {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 5; i++) {
+      code += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return code;
+  }
+
+  private cleanup() {
+    const now = Date.now();
+    // Cleanup every 5 minutes
+    if (now - globalForGames.__lastCleanup! < 300000) return;
+    globalForGames.__lastCleanup = now;
+
+    const entries = Array.from(this.games.entries());
+    for (const [id, game] of entries) {
+      // Remove games older than 30 minutes
+      if (now - game.createdAt > 1800000) {
+        this.games.delete(id);
+      }
+    }
+  }
 
   createRoom(): string {
-    const roomId = uuidv4().slice(0, 6).toUpperCase();
+    this.cleanup();
+    const roomId = this.generateRoomCode();
     const game: GameState = {
       roomId,
       players: [],
-      deck: createDeck(),
-      currentTurn: 0,
+      deck: [],
       phase: 'waiting',
+      currentTurn: 0,
       round: 1,
       winner: null,
+      createdAt: Date.now(),
     };
     this.games.set(roomId, game);
     return roomId;
-  }
-
-  getGame(roomId: string): GameState | undefined {
-    return this.games.get(roomId);
   }
 
   joinRoom(roomId: string, playerName: string): Player | null {
@@ -33,143 +71,135 @@ export class GameManager {
       hand: [],
       score: 0,
       status: 'waiting',
-      wins: 0,
       isReady: false,
+      wins: 0,
     };
-
     game.players.push(player);
     return player;
   }
 
-  setReady(roomId: string, playerId: string): boolean {
-    const game = this.games.get(roomId);
-    if (!game) return false;
-
-    const player = game.players.find(p => p.id === playerId);
-    if (player) player.isReady = true;
-
-    // Start if both ready
-    if (game.players.length === 2 && game.players.every(p => p.isReady)) {
-      this.startRound(roomId);
-      return true;
-    }
-    return false;
+  getGame(roomId: string): GameState | undefined {
+    return this.games.get(roomId);
   }
 
-  startRound(roomId: string): void {
+  setReady(roomId: string, playerId: string) {
     const game = this.games.get(roomId);
     if (!game) return;
 
-    // Reset
+    const player = game.players.find(p => p.id === playerId);
+    if (player) {
+      player.isReady = true;
+    }
+
+    // If both players are ready, start the game
+    if (game.players.length === 2 && game.players.every(p => p.isReady)) {
+      this.startRound(game);
+    }
+  }
+
+  private startRound(game: GameState) {
     game.deck = createDeck();
+    game.phase = 'playing';
     game.winner = null;
     game.currentTurn = 0;
-    game.phase = 'dealing';
 
     // Deal 2 cards to each player
     for (const player of game.players) {
       player.hand = [game.deck.pop()!, game.deck.pop()!];
       player.score = calculateScore(player.hand);
-      player.status = isBlackjack(player.hand) ? 'blackjack' : 'playing';
-    }
+      player.status = 'playing';
 
-    // Check instant blackjacks
-    const bjs = game.players.filter(p => p.status === 'blackjack');
-    if (bjs.length > 0) {
-      game.phase = 'result';
-      if (bjs.length === 2) {
-        game.winner = null; // tie
-      } else {
-        game.winner = bjs[0].id;
-        bjs[0].wins++;
+      // Check for blackjack
+      if (isBlackjack(player.hand)) {
+        player.status = 'blackjack';
       }
-    } else {
-      game.phase = 'playing';
+    }
+
+    // If anyone has blackjack, end immediately
+    if (game.players.some(p => p.status === 'blackjack')) {
+      this.endRound(game);
     }
   }
 
-  hit(roomId: string, playerId: string): Card | null {
+  hit(roomId: string, playerId: string) {
     const game = this.games.get(roomId);
-    if (!game || game.phase !== 'playing') return null;
+    if (!game || game.phase !== 'playing') return;
 
-    const playerIdx = game.players.findIndex(p => p.id === playerId);
-    if (playerIdx !== game.currentTurn) return null;
+    const currentPlayer = game.players[game.currentTurn];
+    if (currentPlayer.id !== playerId) return;
 
-    const player = game.players[playerIdx];
-    const card = game.deck.pop()!;
-    player.hand.push(card);
-    player.score = calculateScore(player.hand);
+    // Draw a card
+    const card = game.deck.pop();
+    if (!card) return;
 
-    if (player.score > 21) {
-      player.status = 'bust';
-      this.nextTurn(roomId);
-    }
+    currentPlayer.hand.push(card);
+    currentPlayer.score = calculateScore(currentPlayer.hand);
 
-    return card;
-  }
-
-  stand(roomId: string, playerId: string): boolean {
-    const game = this.games.get(roomId);
-    if (!game || game.phase !== 'playing') return false;
-
-    const playerIdx = game.players.findIndex(p => p.id === playerId);
-    if (playerIdx !== game.currentTurn) return false;
-
-    game.players[playerIdx].status = 'stand';
-    this.nextTurn(roomId);
-    return true;
-  }
-
-  private nextTurn(roomId: string): void {
-    const game = this.games.get(roomId);
-    if (!game) return;
-
-    game.currentTurn++;
-
-    // If all players done
-    if (game.currentTurn >= game.players.length) {
-      this.resolveRound(roomId);
+    // Check bust
+    if (currentPlayer.score > 21) {
+      currentPlayer.status = 'bust';
+      this.nextTurn(game);
     }
   }
 
-  private resolveRound(roomId: string): void {
+  stand(roomId: string, playerId: string) {
     const game = this.games.get(roomId);
-    if (!game) return;
+    if (!game || game.phase !== 'playing') return;
 
+    const currentPlayer = game.players[game.currentTurn];
+    if (currentPlayer.id !== playerId) return;
+
+    currentPlayer.status = 'stand';
+    this.nextTurn(game);
+  }
+
+  private nextTurn(game: GameState) {
+    // Check if all players are done
+    const allDone = game.players.every(p => p.status !== 'playing');
+    if (allDone) {
+      this.endRound(game);
+      return;
+    }
+
+    // Move to next player
+    game.currentTurn = (game.currentTurn + 1) % game.players.length;
+
+    // Skip players who are already done
+    if (game.players[game.currentTurn].status !== 'playing') {
+      this.endRound(game);
+    }
+  }
+
+  private endRound(game: GameState) {
     game.phase = 'result';
-    const [p1, p2] = game.players;
-    const winnerId = determineWinner(p1, p2);
-    game.winner = winnerId;
-
-    if (winnerId) {
-      const winner = game.players.find(p => p.id === winnerId);
-      if (winner) winner.wins++;
+    if (game.players.length === 2) {
+      const winner = determineWinner(game.players[0], game.players[1]);
+      game.winner = winner;
+      if (winner) {
+        const winPlayer = game.players.find(p => p.id === winner);
+        if (winPlayer) winPlayer.wins++;
+      }
     }
+  }
+
+  nextRound(roomId: string) {
+    const game = this.games.get(roomId);
+    if (!game || game.phase !== 'result') return;
 
     game.round++;
-  }
-
-  nextRound(roomId: string): void {
-    const game = this.games.get(roomId);
-    if (!game) return;
-
-    for (const player of game.players) {
-      player.isReady = false;
-      player.status = 'waiting';
-      player.hand = [];
-      player.score = 0;
-    }
+    game.players.forEach(p => {
+      p.isReady = false;
+      p.hand = [];
+      p.score = 0;
+      p.status = 'waiting';
+    });
     game.phase = 'waiting';
     game.winner = null;
-  }
 
-  removePlayer(roomId: string, playerId: string): void {
-    const game = this.games.get(roomId);
-    if (!game) return;
-
-    game.players = game.players.filter(p => p.id !== playerId);
-    if (game.players.length === 0) {
-      this.games.delete(roomId);
+    // Auto-ready both players for next round
+    game.players.forEach(p => p.isReady = true);
+    if (game.players.length === 2) {
+      this.startRound(game);
     }
   }
 }

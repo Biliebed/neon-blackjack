@@ -26,6 +26,7 @@ export interface GameState {
   phase: 'waiting' | 'dealing' | 'playing' | 'result';
   round: number;
   winner: string | null;
+  createdAt: number;
 }
 
 // Create a shuffled deck (6 decks)
